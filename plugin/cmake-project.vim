@@ -22,7 +22,8 @@ function! s:set_options()
     let s:options = {
     \  'g:cmake_project_show_bar':                1,
     \  'g:loaded_cmake_project':                  1,
-    \  'g:cmake_project_build_directory':        'build'
+    \  'g:cmake_project_build_directory':        'build',
+    \  'g:cmake_project_compile_concurrency':     0
     \ }
 
     for aOption in keys(s:options)
@@ -195,16 +196,29 @@ function! s:cmake_project_build() abort
     endif
 endfunction
 
+function! ChompedSystem( ... )
+    return substitute(call('system', a:000), '\n\+$', '', '')
+endfunction
+
 function! s:cmake_project_compile()
     let build_directory = s:cmake_project_source_directory . "/" . g:cmake_project_build_directory
+    let concurrency = g:cmake_project_compile_concurrency
+    if concurrency == 0
+        if filereadable("/proc/cpuinfo")
+            let concurrency = ChompedSystem('cat /proc/cpuinfo | grep "^processor" | wc -l')
+            echom "using concurrency=" . concurrency
+        else
+            let concurrency = 1
+        endif
+    endif
     if !isdirectory(build_directory) || !filereadable(build_directory ."/Makefile")
         echo 'Run first :CMakeBuild command to create "Makefile"'
         return
     endif
     if s:cmake_project_tmux_running 
-        call VimuxRunCommand('make -C' .build_directory)
+        call VimuxRunCommand("make -j" . concurrency . " -C " . build_directory)
     else
-        exec '!make -C ' . build_directory
+        exec '!make -j' . concurrency . ' -C ' . build_directory
     endif
 endfunction
 
